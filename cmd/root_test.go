@@ -93,7 +93,21 @@ func TestParseCLIArgs(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, opts.secure)
 		assert.False(t, opts.help)
+		assert.Empty(t, opts.portVars)
 		assert.Equal(t, []string{"vite", "--host"}, remaining)
+	})
+
+	t.Run("parses repeated port var flags", func(t *testing.T) {
+		opts, remaining, err := parseCLIArgs([]string{"-p", "DEVTOOLS_PORT", "--port-var", "INSPECT_PORT", "vite"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"DEVTOOLS_PORT", "INSPECT_PORT"}, opts.portVars)
+		assert.Equal(t, []string{"vite"}, remaining)
+	})
+
+	t.Run("rejects missing port var value", func(t *testing.T) {
+		_, _, err := parseCLIArgs([]string{"-p"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing value")
 	})
 
 	t.Run("stops parsing at first non-flag", func(t *testing.T) {
@@ -114,6 +128,7 @@ func TestParseCLIArgs(t *testing.T) {
 		opts, remaining, err := parseCLIArgs([]string{"--", "-s"})
 		require.NoError(t, err)
 		assert.False(t, opts.secure)
+		assert.Empty(t, opts.portVars)
 		assert.Equal(t, []string{"-s"}, remaining)
 	})
 
@@ -122,4 +137,12 @@ func TestParseCLIArgs(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown flag")
 	})
+}
+
+func TestAllocateExtraPorts(t *testing.T) {
+	ports, err := allocateExtraPorts([]string{"DEVTOOLS_PORT", "INSPECT_PORT"})
+	require.NoError(t, err)
+	require.Len(t, ports, 2)
+	assert.NotEmpty(t, ports["DEVTOOLS_PORT"])
+	assert.NotEmpty(t, ports["INSPECT_PORT"])
 }

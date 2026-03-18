@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/semistrict/devup/internal/envfile"
 	"github.com/semistrict/devup/internal/project"
 	"github.com/semistrict/devup/internal/proxy"
 	"github.com/semistrict/devup/internal/server"
@@ -25,8 +26,18 @@ type proxyClient interface {
 }
 
 type cliOptions struct {
-	secure bool
-	help   bool
+	secure   bool
+	help     bool
+	portVars []string
+}
+
+func publicURL(hostname string, secure bool) string {
+	cfg := proxy.DefaultConfig()
+	scheme := "http"
+	if secure {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, hostname, cfg.ListenPort)
 }
 
 func Execute() {
@@ -63,14 +74,15 @@ func execute(args []string) error {
 		}
 		return runURL(opts.secure)
 	default:
-		return runRoot(remaining, opts.secure)
+		return runRootWithOptions(remaining, opts)
 	}
 }
 
 func parseCLIArgs(args []string) (cliOptions, []string, error) {
 	var opts cliOptions
 
-	for i, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if arg == "--" {
 			return opts, args[i+1:], nil
 		}
@@ -81,6 +93,12 @@ func parseCLIArgs(args []string) (cliOptions, []string, error) {
 		switch arg {
 		case "-s", "--secure":
 			opts.secure = true
+		case "-p", "--port-var":
+			if i+1 >= len(args) {
+				return cliOptions{}, nil, errors.New("devup: missing value for -p/--port-var")
+			}
+			opts.portVars = append(opts.portVars, args[i+1])
+			i++
 		case "-h", "--help":
 			opts.help = true
 		default:
@@ -94,11 +112,28 @@ func parseCLIArgs(args []string) (cliOptions, []string, error) {
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  devup [-s|--secure] <command...>")
+	fmt.Fprintln(w, "  devup [-s|--secure] [-p|--port-var ENV_VAR]... <command...>")
 	fmt.Fprintln(w, "  devup [-s|--secure] status")
 	fmt.Fprintln(w, "  devup [-s|--secure] url")
 }
 
+func allocateExtraPorts(names []string) (map[string]string, error) {
+	ports := make(map[string]string, len(names))
+	for _, name := range names {
+		port, err := server.FindFreePort()
+		if err != nil {
+			return nil, err
+		}
+		ports[name] = fmt.Sprintf("%d", port)
+	}
+	return ports, nil
+}
+
 func runRoot(args []string, secure bool) error {
+	return runRootWithOptions(args, cliOptions{secure: secure})
+}
+
+func runRootWithOptions(args []string, opts cliOptions) error {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	if os.Getenv("DEVUP") == "1" {
@@ -118,6 +153,15 @@ func runRoot(args []string, secure bool) error {
 
 	worktree := project.DetectWorktree(proj.Root)
 	hostname := project.Hostname(proj.Name, worktree)
+	publicURL := publicURL(hostname, opts.secure)
+	childEnv, err := envfile.LoadLocalEnv(proj.Root)
+	if err != nil {
+		return fmt.Errorf("load .env.local: %w", err)
+	}
+	extraPorts, err := allocateExtraPorts(opts.portVars)
+	if err != nil {
+		return fmt.Errorf("allocate extra ports: %w", err)
+	}
 
 	if err := server.EnsureDirs(proj.Root); err != nil {
 		return err
@@ -130,7 +174,7 @@ func runRoot(args []string, secure bool) error {
 	}
 
 	cfg := proxy.DefaultConfig()
-	cfg.Secure = secure
+	cfg.Secure = opts.secure
 
 	if cfg.Secure {
 		if err := proxy.CheckTrust(); err != nil {
@@ -167,14 +211,18 @@ func runRoot(args []string, secure bool) error {
 	}
 	defer cleanup()
 
+	childEnv["CLOUDFLARE_INCLUDE_PROCESS_ENV"] = "true"
+	childEnv["DEVUP_PUBLIC_URL"] = publicURL
+	childEnv["DEVUP_URL"] = publicURL
+	childEnv["NODE_ENV"] = "development"
+	for key, value := range extraPorts {
+		childEnv[key] = value
+	}
+
 	if err := startServer(logger, args, hostname, port, output, client, &proc, &procMu, proj.Root, serverName,
 		old,
 		func() {
-			scheme := "http"
-			if cfg.Secure {
-				scheme = "https"
-			}
-			fmt.Fprintln(os.Stdout, formatStatusLine(fmt.Sprintf("devup: ready %s://%s:%d", scheme, hostname, cfg.ListenPort)))
+			fmt.Fprintln(os.Stdout, formatStatusLine(fmt.Sprintf("devup: ready %s", publicURL)))
 			fmt.Fprintln(os.Stdout, formatStatusLine(fmt.Sprintf("devup: log %s", displayPath(logPath))))
 		},
 		func(err error) {
@@ -183,6 +231,7 @@ func runRoot(args []string, secure bool) error {
 		func(err error) {
 			exitCh <- err
 		},
+		childEnv,
 	); err != nil {
 		return fmt.Errorf("start server: %w", err)
 	}
@@ -217,11 +266,12 @@ func startServer(
 	onRegistered func(),
 	onWarning func(error),
 	onExit func(error),
+	extraEnv map[string]string,
 ) error {
 	procMu.Lock()
 	defer procMu.Unlock()
 
-	p, err := server.StartProcess(args, port, output, output)
+	p, err := server.StartProcess(args, port, output, output, extraEnv)
 	if err != nil {
 		return err
 	}

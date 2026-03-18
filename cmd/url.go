@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/semistrict/devup/internal/project"
-	"github.com/semistrict/devup/internal/proxy"
 )
 
 func runURL(secure bool) error {
@@ -21,13 +20,6 @@ func runURL(secure bool) error {
 
 	worktree := project.DetectWorktree(proj.Root)
 	hostname := project.Hostname(proj.Name, worktree)
-	cfg := proxy.DefaultConfig()
-
-	scheme := "http"
-	if secure {
-		scheme = "https"
-	}
-
-	fmt.Printf("%s://%s:%d\n", scheme, hostname, cfg.ListenPort)
+	fmt.Println(publicURL(hostname, secure))
 	return nil
 }

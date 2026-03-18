@@ -8,9 +8,34 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
+
+func mergedEnv(extraEnv map[string]string, port int) ([]string, error) {
+	envMap := make(map[string]string, len(extraEnv)+1)
+	for _, entry := range os.Environ() {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		envMap[key] = value
+	}
+	envMap["PORT"] = strconv.Itoa(port)
+	for key, value := range extraEnv {
+		if strings.ContainsRune(key, '=') {
+			return nil, fmt.Errorf("invalid env var name %q", key)
+		}
+		envMap[key] = value
+	}
+
+	env := make([]string, 0, len(envMap))
+	for key, value := range envMap {
+		env = append(env, key+"="+value)
+	}
+	return env, nil
+}
 
 // FindFreePort asks the OS for a free TCP port.
 func FindFreePort() (int, error) {
@@ -30,7 +55,7 @@ type Process struct {
 }
 
 // StartProcess launches a command with PORT set, directing output to the given writers.
-func StartProcess(args []string, port int, stdout, stderr io.Writer) (*Process, error) {
+func StartProcess(args []string, port int, stdout, stderr io.Writer, extraEnv map[string]string) (*Process, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("no command specified")
 	}
@@ -47,7 +72,12 @@ func StartProcess(args []string, port int, stdout, stderr io.Writer) (*Process, 
 
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Env = append(os.Environ(), "PORT="+strconv.Itoa(port))
+	cmd.Stdin = os.Stdin
+	env, err := mergedEnv(extraEnv, port)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = env
 	// Create a new process group so we can kill the whole tree
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
