@@ -34,8 +34,7 @@ devup will:
 ### Subcommands
 
 ```bash
-devup status              # List all running dev servers
-devup restart <name|idx>  # Remove a route from the proxy
+devup status  # List all running dev servers
 ```
 
 ## How it works

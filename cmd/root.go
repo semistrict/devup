@@ -209,7 +209,6 @@ var secureFlag bool
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(restartCmd)
 
 	rootCmd.Flags().BoolVarP(&secureFlag, "secure", "s", false, "Enable HTTPS (requires `caddy trust` to be run once)")
 	rootCmd.Flags().SetInterspersed(false)
