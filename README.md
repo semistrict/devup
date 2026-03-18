@@ -42,7 +42,7 @@ devup status  # List all running dev servers
 - **Project detection**: Finds project name from `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, or the git directory name
 - **Worktree support**: Detects git worktrees and prefixes the hostname (e.g. `feature-myapp.devup.localhost`)
 - **Reverse proxy**: Uses Caddy's admin API to dynamically register/deregister routes
-- **Restart detection**: Running devup twice in the same project with the same args kills the previous instance
+- **Restart detection**: Running devup twice in the same project with the same args waits for the replacement to be listening and re-routed before stopping the previous instance
 - **Logs**: Output is logged to `.devup/log/<command>.log` in the project directory
 
 ## Configuration

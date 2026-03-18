@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 )
 
 // Route represents a registered route in Caddy.
 type Route struct {
 	ID       string `json:"@id,omitempty"`
 	Hostname string `json:"-"`
+	Dial     string `json:"-"`
 	Port     int    `json:"-"`
 }
 
@@ -50,7 +53,7 @@ func NewClientWithAddr(adminAPI string) *Client {
 	return &Client{adminAPI: adminAPI, http: &http.Client{}}
 }
 
-func (c *Client) routesURL() string { return c.adminAPI + "/config/apps/http/servers/devup/routes" }
+func (c *Client) routesURL() string      { return c.adminAPI + "/config/apps/http/servers/devup/routes" }
 func (c *Client) idURL(id string) string { return c.adminAPI + "/id/" + id }
 
 // Register adds or updates a route in Caddy for the given hostname → port.
@@ -123,15 +126,28 @@ func (c *Client) ListRoutes() ([]Route, error) {
 		if len(r.Match) > 0 && len(r.Match[0].Host) > 0 {
 			hostname = r.Match[0].Host[0]
 		}
-		port := 0
+		dial := ""
 		if len(r.Handle) > 0 && len(r.Handle[0].Upstreams) > 0 {
-			fmt.Sscanf(r.Handle[0].Upstreams[0].Dial, "localhost:%d", &port)
+			dial = r.Handle[0].Upstreams[0].Dial
 		}
 		routes = append(routes, Route{
 			ID:       r.ID,
 			Hostname: hostname,
-			Port:     port,
+			Dial:     dial,
+			Port:     routePort(dial),
 		})
 	}
 	return routes, nil
+}
+
+func routePort(dial string) int {
+	_, rawPort, err := net.SplitHostPort(dial)
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return 0
+	}
+	return port
 }

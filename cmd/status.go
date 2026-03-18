@@ -5,18 +5,10 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/spf13/cobra"
-
 	"github.com/semistrict/devup/internal/proxy"
 )
 
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "List running dev servers",
-	RunE:  runStatus,
-}
-
-func runStatus(cmd *cobra.Command, args []string) error {
+func runStatus() error {
 	client := proxy.NewClient()
 	routes, err := client.ListRoutes()
 	if err != nil {
