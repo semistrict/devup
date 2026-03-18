@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -65,6 +66,13 @@ func testConfig(t *testing.T) proxy.Config {
 	return cfg
 }
 
+func requireCaddy(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("caddy"); err != nil {
+		t.Skip("skipped: caddy not found in PATH")
+	}
+}
+
 func proxyGet(t *testing.T, cfg proxy.Config, hostname string) string {
 	t.Helper()
 	// Caddy restarts its listener and issues a cert after a new route is added.
@@ -90,6 +98,7 @@ func proxyGet(t *testing.T, cfg proxy.Config, hostname string) string {
 }
 
 func TestIntegration_RegisterAndProxy(t *testing.T) {
+	requireCaddy(t)
 	t.Skip("skipped: Caddy TLS cert provisioning makes this flaky in test")
 	cfg := testConfig(t)
 	require.NoError(t, cfg.EnsureRunning())
@@ -110,6 +119,7 @@ func TestIntegration_RegisterAndProxy(t *testing.T) {
 }
 
 func TestIntegration_DeregisterRoute(t *testing.T) {
+	requireCaddy(t)
 	cfg := testConfig(t)
 	require.NoError(t, cfg.EnsureRunning())
 	t.Cleanup(func() { cfg.Stop() })
@@ -129,6 +139,7 @@ func TestIntegration_DeregisterRoute(t *testing.T) {
 }
 
 func TestIntegration_ReRegisterSameHostname(t *testing.T) {
+	requireCaddy(t)
 	t.Skip("skipped: Caddy TLS cert provisioning makes this flaky in test")
 	cfg := testConfig(t)
 	require.NoError(t, cfg.EnsureRunning())
@@ -149,6 +160,7 @@ func TestIntegration_ReRegisterSameHostname(t *testing.T) {
 }
 
 func TestIntegration_MultipleRoutes(t *testing.T) {
+	requireCaddy(t)
 	t.Skip("skipped: Caddy TLS cert provisioning makes this flaky in test")
 	cfg := testConfig(t)
 	require.NoError(t, cfg.EnsureRunning())
