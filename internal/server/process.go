@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 func mergedEnv(extraEnv map[string]string, port int) ([]string, error) {
@@ -78,8 +80,15 @@ func StartProcess(args []string, port int, stdout, stderr io.Writer, extraEnv ma
 		return nil, err
 	}
 	cmd.Env = env
-	// Create a new process group so we can kill the whole tree
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Create a new process group so we can kill the whole tree.
+	// When stdin is a TTY, also make the child the foreground group
+	// so it can read stdin (e.g. vite keypresses) without SIGTTIN.
+	spa := &syscall.SysProcAttr{Setpgid: true}
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		spa.Foreground = true
+		spa.Ctty = int(os.Stdin.Fd())
+	}
+	cmd.SysProcAttr = spa
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start process: %w", err)

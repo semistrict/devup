@@ -73,6 +73,11 @@ func execute(args []string) error {
 			return fmt.Errorf("devup url: unexpected arguments: %s", strings.Join(remaining[1:], " "))
 		}
 		return runURL(opts.secure)
+	case "open":
+		if len(remaining) != 1 {
+			return fmt.Errorf("devup open: unexpected arguments: %s", strings.Join(remaining[1:], " "))
+		}
+		return runOpen(opts.secure)
 	default:
 		return runRootWithOptions(remaining, opts)
 	}
@@ -115,6 +120,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  devup [-s|--secure] [-p|--port-var ENV_VAR]... <command...>")
 	fmt.Fprintln(w, "  devup [-s|--secure] status")
 	fmt.Fprintln(w, "  devup [-s|--secure] url")
+	fmt.Fprintln(w, "  devup [-s|--secure] open")
 }
 
 func allocateExtraPorts(names []string) (map[string]string, error) {
